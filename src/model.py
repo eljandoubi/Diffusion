@@ -202,3 +202,17 @@ class ResidualBlock(nn.Module):
         x = x + self.residual_connection(residual_connection)
 
         return x
+
+class UpSampleBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding='same')
+        )
+
+    def forward(self, inputs: torch.Tensor):
+        batch, channels, height, width = inputs.shape
+        upsampled = self.upsample(inputs)
+        assert (upsampled.shape == (batch, channels, height*2, width*2))
+        return upsampled
