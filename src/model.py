@@ -122,7 +122,7 @@ class TransformerBlock(nn.Module):
 class SinusoidalTimeEmbedding(nn.Module):
     def __init__(self, time_embed_dim: int, scaled_time_embed_dim: int):
         super().__init__()
-        self.inv_freqs = self.register_buffer(
+        self.register_buffer(
             "inv_freqs",
             1.0
             / (
@@ -278,12 +278,9 @@ class UNET(nn.Module):
         ### Store a variable of the final Output Shape of our Encoder + Bottleneck so we can compute Decoder Shapes ###
         out_dim = ending_channel_size
 
-        ### Reverse our Encoder config to compute the Decoder ###
-        reversed_encoder_config = self.encoder_config[::-1]
-
         ### The output of our reversed encoder will be the number of channels added for residual connections ###
         self.decoder_config = []
-        for idx, (metadata, type) in enumerate(reversed_encoder_config):
+        for idx, (metadata, type) in enumerate(self.encoder_config[::-1]):
             ### Flip in_channels, out_channels with the previous out_dim added on ###
             if type != "attention":
                 enc_in_channels, enc_out_channels = metadata
@@ -427,3 +424,59 @@ class UNET(nn.Module):
         x = self.conv_out_proj(x)
 
         return x
+
+
+class Diffusion(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        start_dim: int = 128,
+        dim_mults: tuple[int, ...] = (1, 2, 4),
+        residual_blocks_per_group: int = 1,
+        groupnorm_num_groups: int = 16,
+        time_embed_dim: int = 128,
+        time_embed_dim_ratio: float = 2,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.start_dim = start_dim
+        self.dim_mults = dim_mults
+        self.residual_blocks_per_group = residual_blocks_per_group
+        self.groupnorm_num_groups = groupnorm_num_groups
+
+        self.time_embed_dim = time_embed_dim
+        self.scaled_time_embed_dim = int(time_embed_dim * time_embed_dim_ratio)
+
+        self.sinusoid_time_embeddings = SinusoidalTimeEmbedding(
+            time_embed_dim=self.time_embed_dim,
+            scaled_time_embed_dim=self.scaled_time_embed_dim,
+        )
+
+        self.unet = UNET(
+            in_channels=in_channels,
+            start_dim=start_dim,
+            dim_mults=dim_mults,
+            residual_blocks_per_group=residual_blocks_per_group,
+            groupnorm_num_groups=groupnorm_num_groups,
+            time_embed_dim=self.scaled_time_embed_dim,
+        )
+
+    def forward(self, noisy_inputs: torch.Tensor, timesteps: torch.Tensor):
+        ### Embed the Timesteps ###
+        timestep_embeddings = self.sinusoid_time_embeddings(timesteps)
+
+        ### Pass Images + Time Embeddings through UNET ###
+        noise_pred = self.unet(noisy_inputs, timestep_embeddings)
+
+        return noise_pred
+
+
+if __name__ == "__main__":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = Diffusion().to(device)
+    batch = 7
+    rand_image = torch.rand(batch, 3, 64, 64, device=device)
+    time_steps = torch.randint(0, 1000, (batch,), device=device)
+    noise = model(rand_image, time_steps)
+    assert noise.shape == rand_image.shape
+    assert noise.device == device
