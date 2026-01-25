@@ -47,3 +47,24 @@ class SelfAttention(nn.Module):
         x = self.proj_drop(x)
 
         return x
+
+
+class MLP(nn.Module):
+    def __init__(
+        self, in_channels: int, mlp_ratio: int = 4, act_layer=nn.GELU, mlp_p: float = 0
+    ):
+        super().__init__()
+        hidden_features = int(in_channels * mlp_ratio)
+        self.fc1 = nn.Linear(in_channels, hidden_features)
+        self.act = act_layer()
+        self.drop1 = nn.Dropout(mlp_p)
+        self.fc2 = nn.Linear(hidden_features, in_channels)
+        self.drop2 = nn.Dropout(mlp_p)
+
+    def forward(self, x: torch.Tensor):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop1(x)
+        x = self.fc2(x)
+        x = self.drop2(x)
+        return x
