@@ -120,7 +120,7 @@ class TransformerBlock(nn.Module):
 
 
 class SinusoidalTimeEmbedding(nn.Module):
-    def __init__(self, time_embed_dim, scaled_time_embed_dim):
+    def __init__(self, time_embed_dim: int, scaled_time_embed_dim: int):
         super().__init__()
         self.inv_freqs = self.register_buffer(
             "inv_freqs",
@@ -145,3 +145,60 @@ class SinusoidalTimeEmbedding(nn.Module):
         )
         embeddings = self.time_mlp(embeddings)
         return embeddings
+
+
+class ResidualBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        groupnorm_num_groups: int,
+        time_embed_dim: int,
+    ):
+        super().__init__()
+
+        ### Time Embedding Expansion to Out Channels ###
+        self.time_expand = nn.Linear(time_embed_dim, out_channels)
+
+        ### Input Convolutions + GroupNorm ###
+        self.groupnorm_1 = nn.GroupNorm(groupnorm_num_groups, in_channels)
+        self.conv_1 = nn.Conv2d(
+            in_channels, out_channels, kernel_size=3, padding="same"
+        )
+
+        ### Input + Time Embedding Convolutions + GroupNorm ###
+        self.groupnorm_2 = nn.GroupNorm(groupnorm_num_groups, out_channels)
+        self.conv_2 = nn.Conv2d(
+            out_channels, out_channels, kernel_size=3, padding="same"
+        )
+
+        ### Residual Layer ###
+        self.residual_connection = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+
+    def forward(self, x: torch.Tensor, time_embeddings: torch.Tensor):
+        residual_connection = x
+
+        ### Time Expansion to Out Channels ###
+        time_embed = self.time_expand(time_embeddings)
+
+        ### Input GroupNorm and Convolutions ###
+        x = self.groupnorm_1(x)
+        x = F.silu(x)
+        x = self.conv_1(x)
+
+        ### Add Time Embeddings ###
+        x = x + time_embed.reshape((*time_embed.shape, 1, 1))
+
+        ### Group Norm and Conv Again! ###
+        x = self.groupnorm_2(x)
+        x = F.silu(x)
+        x = self.conv_2(x)
+
+        ### Add Residual and Return ###
+        x = x + self.residual_connection(residual_connection)
+
+        return x
