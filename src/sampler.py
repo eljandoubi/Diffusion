@@ -32,9 +32,6 @@ class Sampler:
         return input
 
     def add_noise(self, inputs: torch.Tensor, timesteps: torch.Tensor):
-        ### Grab the Device we want to place tensors on ###
-        device = inputs.device
-
         alpha_cumulative_prod_timesteps = self.alpha_cumulative_prod[timesteps]
 
         ### Compute Mean Coefficient ###
@@ -67,9 +64,6 @@ class Sampler:
         assert input.shape == predicted_noise.shape, (
             "Shapes of noise pattern and input image must be identical!!"
         )
-
-        ### Grab Device to Place Tensors On ###
-        device = input.device
 
         ### Create a mask (if timestep == 0 sigma_z will also be 0 so we need to save this for later ###
         greater_than_0_mask = (timestep >= 1).int()
