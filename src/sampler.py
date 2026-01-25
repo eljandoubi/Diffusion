@@ -1,15 +1,18 @@
 import torch
 
+
 class Sampler:
     def __init__(
         self,
         total_timesteps: int = 1000,
         beta_start: float = 0.0001,
         beta_end: float = 0.02,
+        device="cuda",
     ):
         self.total_timesteps = total_timesteps
         self.beta_start = beta_start
         self.beta_end = beta_end
+        self.device = device
 
         ### Define Basic Beta Scheduler ###
         self.beta_schedule = self.linear_beta_schedule()
@@ -19,7 +22,9 @@ class Sampler:
         self.alpha_cumulative_prod = torch.cumprod(self.alpha, dim=-1)
 
     def linear_beta_schedule(self):
-        return torch.linspace(self.beta_start, self.beta_end, self.total_timesteps)
+        return torch.linspace(
+            self.beta_start, self.beta_end, self.total_timesteps, device=self.device
+        )
 
     def _repeated_unsqueeze(self, target_shape: torch.Tensor, input: torch.Tensor):
         while target_shape.dim() > input.dim():
@@ -27,8 +32,6 @@ class Sampler:
         return input
 
     def add_noise(self, inputs: torch.Tensor, timesteps: torch.Tensor):
-        batch_size, c, h, w = inputs.shape
-
         ### Grab the Device we want to place tensors on ###
         device = inputs.device
 
@@ -107,3 +110,13 @@ class Sampler:
         )
 
         return denoised
+
+
+if __name__ == "__main__":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    sampler = Sampler(device=device)
+    batch = 7
+    rand_image = torch.rand(batch, 3, 64, 64, device=device)
+    time_steps = torch.randint(0, 1000, (batch,), device=device)
+    noise_image, noise = sampler.add_noise(rand_image, time_steps)
+    new_image = sampler.remove_noise(noise_image, time_steps, noise)
