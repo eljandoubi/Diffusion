@@ -35,9 +35,7 @@ class Sampler:
         ### Grab the Device we want to place tensors on ###
         device = inputs.device
 
-        alpha_cumulative_prod_timesteps = self.alpha_cumulative_prod[timesteps].to(
-            device
-        )
+        alpha_cumulative_prod_timesteps = self.alpha_cumulative_prod[timesteps]
 
         ### Compute Mean Coefficient ###
         mean_coeff = alpha_cumulative_prod_timesteps**0.5
@@ -77,11 +75,10 @@ class Sampler:
         greater_than_0_mask = (timestep >= 1).int()
 
         ### Compute Sigma (b_t * (1 - cumulative_a_(t-1)) / (1 - cumulative_a)) * noise ###
-        alpha_cumulative_t = self.alpha_cumulative_prod[timestep].to(device)
-        alpha_cumulative_prod_t_prev = self.alpha_cumulative_prod[timestep - 1].to(
-            device
-        )  # (timestep - 1) if timestep is 0 is WRONG! we will multiply by 0 later
-        beta_t = self.beta_schedule[timestep].to(device)
+        alpha_cumulative_t = self.alpha_cumulative_prod[timestep]
+        # (timestep - 1) if timestep is 0 is WRONG! we will multiply by 0 later
+        alpha_cumulative_prod_t_prev = self.alpha_cumulative_prod[timestep - 1]
+        beta_t = self.beta_schedule[timestep]
         noise = torch.randn_like(input)
         variance = (
             beta_t * (1 - alpha_cumulative_prod_t_prev) / (1 - alpha_cumulative_t)
@@ -93,14 +90,14 @@ class Sampler:
         sigma_z = noise * variance**0.5
 
         ### Compute Noise Coefficient (1 - a_t / sqrt(1 - cumulative_a)) where 1 - a_t = b_t ###
-        beta_t = self.beta_schedule[timestep].to(device)
-        alpha_cumulative_t = self.alpha_cumulative_prod[timestep].to(device)
+        beta_t = self.beta_schedule[timestep]
+        alpha_cumulative_t = self.alpha_cumulative_prod[timestep]
         root_one_minus_cumulative_alpha_t = (1 - alpha_cumulative_t) ** 0.5
         noise_coefficient = beta_t / root_one_minus_cumulative_alpha_t
         noise_coefficient = self._repeated_unsqueeze(input, noise_coefficient)
 
         ### Compute 1 / sqrt(a_t) ###
-        reciprocal_root_a_t = (self.alpha[timestep] ** -0.5).to(device)
+        reciprocal_root_a_t = self.alpha[timestep] ** -0.5
         reciprocal_root_a_t = self._repeated_unsqueeze(input, reciprocal_root_a_t)
 
         ### Compute Denoised Image ###
@@ -113,10 +110,13 @@ class Sampler:
 
 
 if __name__ == "__main__":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     sampler = Sampler(device=device)
     batch = 7
     rand_image = torch.rand(batch, 3, 64, 64, device=device)
     time_steps = torch.randint(0, 1000, (batch,), device=device)
     noise_image, noise = sampler.add_noise(rand_image, time_steps)
+    assert noise_image.device == device
+    assert noise_image.shape == noise.shape
     new_image = sampler.remove_noise(noise_image, time_steps, noise)
+    assert new_image.device == device
