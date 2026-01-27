@@ -23,8 +23,11 @@ src/
 ## Installation
 
 1. Clone the repository and navigate to the project directory.
+   ```bash
+   git clone https://github.com/eljandoubi/Diffusion.git
+   ```
 
-2. Create a virtual environment and install the required dependencies:
+3. Create a virtual environment and install the required dependencies:
    ```bash
    uv sync
    ```
